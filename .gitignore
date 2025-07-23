@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+
+# Django
+*.log
+*.pot
+*.pyc
+*.pyo
+*.db
+*.sqlite3
+media/
+staticfiles/
+static/
+
+# Environments
+.env
+.env.*
+venv/
+ENV/
+.venv/
+
+# Test & coverage
+.coverage
+htmlcov/
+.tox/
+.pytest_cache/
+
+# IDEs/editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Migrations (optional, if you want to ignore generated migrations)
+# **/migrations/*.py
+# **/migrations/*.pyc
+
+# Others
+*.bak
+*.swp
+*.tmp
+
+# Node/npm (if any frontend assets)
+node_modules/  

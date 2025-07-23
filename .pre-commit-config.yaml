@@ -1,0 +1,22 @@
+exclude: 'docs|node_modules|migrations|.git|.tox'
+default_stages: [commit]
+fail_fast: false
+repos:
+  - repo: https://github.com/psf/black
+    rev: 24.3.0
+    hooks:
+      - id: black
+        args: ["--fast"]
+        pass_filenames: true
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: ["--profile=black"]
+        pass_filenames: true
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.0.0
+    hooks:
+      - id: flake8
+        args: ["--max-line-length=120"]
+        pass_filenames: true 
