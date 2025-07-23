@@ -1,8 +1,9 @@
 from django.shortcuts import render
-from rest_framework import generics, permissions, status
+from rest_framework import generics, permissions, status, filters
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.db import transaction
+from django_filters.rest_framework import DjangoFilterBackend
 from api.cart.models import Cart, CartItem
 from .models import Order, OrderItem, OrderReview
 from .serializers import OrderSerializer, OrderReviewSerializer
@@ -24,16 +25,26 @@ class CheckoutView(APIView):
             if not address:
                 return Response({'detail': 'No address found for user.'}, status=status.HTTP_400_BAD_REQUEST)
             coupon_code = request.data.get('coupon_code')
+            coupon = None
+            discount = 0
             shipping = 10  # Flat shipping for demo
             tax_rate = 0.05  # 5% tax for demo
-            discount = 0
-            if coupon_code == 'DISCOUNT10':
-                discount = 10
             with transaction.atomic():
                 subtotal = 0
                 for item in cart_items:
                     subtotal += item.product.price * item.quantity
                 tax = round(subtotal * tax_rate, 2)
+                # Coupon logic
+                if coupon_code:
+                    from .models import Coupon
+                    try:
+                        coupon = Coupon.objects.get(code=coupon_code)
+                        valid, reason = coupon.is_valid_for_user(user, subtotal)
+                        if not valid:
+                            return Response({'detail': reason}, status=status.HTTP_400_BAD_REQUEST)
+                        discount = coupon.calculate_discount(subtotal)
+                    except Coupon.DoesNotExist:
+                        return Response({'detail': 'Invalid coupon code.'}, status=status.HTTP_400_BAD_REQUEST)
                 total = subtotal + shipping + tax - discount
                 order = Order.objects.create(
                     user=user,
@@ -43,7 +54,7 @@ class CheckoutView(APIView):
                     discount=discount,
                     tax=tax,
                     shipping=shipping,
-                    coupon_code=coupon_code or None
+                    coupon=coupon
                 )
                 for item in cart_items:
                     price = item.product.price
@@ -56,6 +67,9 @@ class CheckoutView(APIView):
                     )
                     item.product.stock = max(item.product.stock - item.quantity, 0)
                     item.product.save()
+                if coupon:
+                    from .models import CouponUsage
+                    CouponUsage.objects.create(coupon=coupon, user=user, order=order)
                 cart.items.all().delete()
                 cart.is_active = False
                 cart.checked_out = True
@@ -68,15 +82,28 @@ class CheckoutView(APIView):
 class OrderListView(generics.ListAPIView):
     serializer_class = OrderSerializer
     permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['status', 'coupon_code', 'created_at']
+    search_fields = ['tracking_number']
+    ordering_fields = ['created_at', 'checked_out_at', 'total']
 
     def get_queryset(self):
-        return Order.objects.filter(user=self.request.user).order_by('-checked_out_at')
+        if getattr(self, 'swagger_fake_view', False):
+            return Order.objects.none()
+        qs = Order.objects.filter(user=self.request.user).order_by('-checked_out_at')
+        # If admin/manager, allow searching all orders
+        if self.request.user.is_staff or getattr(self.request.user, 'role', None) in ['admin', 'manager']:
+            qs = Order.objects.all().order_by('-checked_out_at')
+            self.search_fields = ['tracking_number', 'user__email']
+        return qs
 
 class OrderDetailView(generics.RetrieveAPIView):
     serializer_class = OrderSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return Order.objects.none()
         return Order.objects.filter(user=self.request.user)
 
 class OrderStatusUpdateView(APIView):

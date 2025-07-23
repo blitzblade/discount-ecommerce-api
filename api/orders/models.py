@@ -6,6 +6,56 @@ from api.products.models import Product
 from api.users.models import Address
 from api.common.utils import send_email
 
+class Coupon(BaseModel):
+    class DiscountType(models.TextChoices):
+        FIXED = 'fixed', 'Fixed'
+        PERCENT = 'percent', 'Percent'
+
+    code = models.CharField(max_length=50, unique=True)
+    discount_type = models.CharField(max_length=10, choices=DiscountType.choices)
+    discount_value = models.DecimalField(max_digits=10, decimal_places=2)
+    usage_limit = models.PositiveIntegerField(null=True, blank=True)
+    usage_limit_per_user = models.PositiveIntegerField(null=True, blank=True)
+    valid_from = models.DateTimeField()
+    valid_to = models.DateTimeField()
+    active = models.BooleanField(default=True)
+    min_order_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    max_discount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
+    def __str__(self):
+        return self.code
+
+    def is_valid_for_user(self, user, order_amount):
+        from django.utils import timezone
+        now = timezone.now()
+        if not self.active or not (self.valid_from <= now <= self.valid_to):
+            return False, 'Coupon is not active or expired.'
+        if order_amount < self.min_order_amount:
+            return False, 'Order does not meet minimum amount.'
+        if self.usage_limit is not None and self.couponusage_set.count() >= self.usage_limit:
+            return False, 'Coupon usage limit reached.'
+        if self.usage_limit_per_user is not None and self.couponusage_set.filter(user=user).count() >= self.usage_limit_per_user:
+            return False, 'You have used this coupon the maximum number of times.'
+        return True, ''
+
+    def calculate_discount(self, order_amount):
+        if self.discount_type == self.DiscountType.FIXED:
+            discount = self.discount_value
+        else:
+            discount = order_amount * (self.discount_value / 100)
+        if self.max_discount is not None:
+            discount = min(discount, self.max_discount)
+        return round(discount, 2)
+
+class CouponUsage(BaseModel):
+    coupon = models.ForeignKey(Coupon, on_delete=models.CASCADE)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    used_at = models.DateTimeField(auto_now_add=True)
+    order = models.ForeignKey('Order', on_delete=models.CASCADE)
+
+    def __str__(self):
+        return f'{self.user.email} used {self.coupon.code} on order {self.order.id}'
+
 class Order(BaseModel):
     class Status(models.TextChoices):
         PENDING = 'pending', 'Pending'
@@ -21,11 +71,10 @@ class Order(BaseModel):
     checked_out_at = models.DateTimeField(auto_now_add=True)
     tracking_number = models.CharField(max_length=100, blank=True, null=True)
     admin_note = models.TextField(blank=True, null=True)
-    # New fields for discounts, taxes, shipping, and coupon
     discount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     tax = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     shipping = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    coupon_code = models.CharField(max_length=50, blank=True, null=True)
+    coupon = models.ForeignKey(Coupon, on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
         return f"Order {self.id} for {self.user.email}"
