@@ -8,6 +8,7 @@ from rest_framework.views import APIView
 
 from api.cart.models import Cart, CartItem
 from api.common.permissions import IsAdminOrManager
+from api.common.utils import calculate_shipping, calculate_tax
 
 from .models import Order, OrderItem
 from .serializers import OrderReviewSerializer, OrderSerializer
@@ -21,30 +22,38 @@ class CheckoutView(APIView):
     def post(self, request):
         user = request.user
         try:
-            cart = Cart.objects.get(user=user, is_active=True)
-            cart_items = CartItem.objects.filter(cart=cart)
-            if not cart_items.exists():
-                return Response(
-                    {"detail": "Cart is empty."}, status=status.HTTP_400_BAD_REQUEST
-                )
             address = (
                 user.addresses.filter(is_default=True).first() or user.addresses.first()
             )
             if not address:
                 return Response(
-                    {"detail": "No address found for user."},
+                    {"detail": "No address found"},
                     status=status.HTTP_400_BAD_REQUEST,
+                )
+            try:
+                cart = Cart.objects.get(user=user, is_active=True)
+            except Cart.DoesNotExist:
+                return Response(
+                    {"detail": "Cart is empty"}, status=status.HTTP_400_BAD_REQUEST
+                )
+            cart_items = CartItem.objects.filter(cart=cart)
+            if not cart_items.exists():
+                return Response(
+                    {"detail": "Cart is empty"}, status=status.HTTP_400_BAD_REQUEST
                 )
             coupon_code = request.data.get("coupon_code")
             coupon = None
             discount = Decimal("0")
-            shipping = Decimal("10")  # Flat shipping for demo
-            tax_rate = Decimal("0.05")  # 5% tax for demo
             with transaction.atomic():
                 subtotal = Decimal("0")
                 for item in cart_items:
                     subtotal += item.product.price * item.quantity
-                tax = (subtotal * tax_rate).quantize(Decimal("0.01"))
+                shipping = calculate_shipping(subtotal, address)
+                shipping_warning = None
+                if shipping is None:
+                    shipping = Decimal("0")
+                    shipping_warning = "Delivery is not supported to this country. You may need to arrange pickup."
+                tax = calculate_tax(subtotal, address)
                 # Coupon logic
                 if coupon_code:
                     from .models import Coupon
@@ -93,7 +102,10 @@ class CheckoutView(APIView):
                 cart.checked_out = True
                 cart.save()
             serializer = OrderSerializer(order)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            data = serializer.data
+            if shipping_warning:
+                data["shipping_warning"] = shipping_warning
+            return Response(data, status=status.HTTP_201_CREATED)
         except Exception as exc:
             return Response(
                 {"detail": str(exc), "type": type(exc).__name__},

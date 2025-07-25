@@ -1,6 +1,17 @@
 from django.contrib import admin
 
-from .models import Coupon, CouponUsage, Order, OrderItem, OrderReview
+from .models import (
+    Country,
+    Coupon,
+    CouponUsage,
+    Order,
+    OrderItem,
+    OrderReview,
+    ShippingMethod,
+    ShippingZone,
+    TaxRate,
+    TaxZone,
+)
 
 
 class OrderItemInline(admin.TabularInline):
@@ -114,3 +125,10 @@ class CouponUsageAdmin(admin.ModelAdmin):
     list_display = ("coupon", "user", "order", "used_at")
     search_fields = ("coupon__code", "user__email", "order__id")
     list_filter = ("used_at",)
+
+
+admin.site.register(ShippingZone)
+admin.site.register(ShippingMethod)
+admin.site.register(TaxZone)
+admin.site.register(TaxRate)
+admin.site.register(Country)

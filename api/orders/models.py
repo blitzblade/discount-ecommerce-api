@@ -146,3 +146,56 @@ class OrderReview(BaseModel):
 
     def __str__(self):
         return f"Review for order {self.order.id} by {self.user.email}"
+
+
+class Country(models.Model):
+    code = models.CharField(max_length=2, unique=True)  # ISO code
+    name = models.CharField(max_length=100)
+
+    def __str__(self):
+        return f"{self.name} ({self.code})"
+
+
+class ShippingZone(models.Model):
+    name = models.CharField(max_length=100)
+    country = models.ForeignKey(Country, on_delete=models.CASCADE)
+    is_remote = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"{self.name} ({self.country})"
+
+
+class ShippingMethod(models.Model):
+    name = models.CharField(max_length=100)
+    zone = models.ForeignKey(
+        ShippingZone, on_delete=models.CASCADE, related_name="methods"
+    )
+    base_rate = models.DecimalField(max_digits=10, decimal_places=2)
+    per_kg_rate = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    free_over = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
+    active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.zone.name})"
+
+
+class TaxZone(models.Model):
+    name = models.CharField(max_length=100)
+    country = models.ForeignKey(Country, on_delete=models.CASCADE)
+    active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.country})"
+
+
+class TaxRate(models.Model):
+    zone = models.ForeignKey(TaxZone, on_delete=models.CASCADE, related_name="rates")
+    rate = models.DecimalField(max_digits=5, decimal_places=4)  # e.g., 0.0750
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
+    active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.zone.name} - {self.rate}"
