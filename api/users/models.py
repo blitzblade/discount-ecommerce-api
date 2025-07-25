@@ -13,7 +13,26 @@ from api.common.models import BaseModel
 from api.common.utils import validate_phonenumber
 
 
+class UserQuerySet(models.QuerySet):
+    def active(self):
+        return self.filter(is_deleted=False)
+
+    def for_user(self, user):
+        if user.is_staff or getattr(user, "role", None) in ["admin", "manager"]:
+            return self.all()
+        return self.active()
+
+
 class UserManager(BaseUserManager):
+    def get_queryset(self):
+        return UserQuerySet(self.model, using=self._db)
+
+    def active(self):
+        return self.get_queryset().active()
+
+    def for_user(self, user):
+        return self.get_queryset().for_user(user)
+
     def create_user(self, email, password=None, username=None, **extra_fields):
         if not email:
             raise ValueError("The Email field must be set")
@@ -78,6 +97,7 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
     otp_secret = models.CharField(max_length=32, blank=True, null=True)
 
     objects = UserManager()
+    all_objects = BaseUserManager()  # fallback for admin to get all users
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["phonenumber"]

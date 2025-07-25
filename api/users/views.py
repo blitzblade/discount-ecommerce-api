@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
 from drf_yasg import openapi
@@ -34,7 +36,9 @@ from .serializers import (
 class UserListCreateView(generics.ListCreateAPIView):
     """List all users or create a new user (admin only for list, open for create)."""
 
-    queryset = User.objects.all()
+    def get_queryset(self):
+        return User.objects.for_user(self.request.user)
+
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     filterset_fields = [
@@ -75,6 +79,9 @@ class AddressListCreateView(generics.ListCreateAPIView):
     filterset_fields = ["city", "state", "country", "is_default"]
     search_fields = ["line1", "line2", "city", "state", "country", "postal_code"]
     ordering_fields = ["created_at", "updated_at"]
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
 
 class AddressRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
@@ -303,9 +310,11 @@ class PhoneVerificationRequestView(APIView):
         phonenumber = serializer.validated_data["phonenumber"]
         user = request.user
         secret = user.otp_secret if user.otp_secret else BASE_OTP_SECRET + phonenumber
+        # Generate the OTP for the user
         otp = generate_otp(secret=secret)
-        # In production, send OTP via SMS provider
-        print(f"OTP for {phonenumber}: {otp}")
+        # TODO: Integrate with SMS provider to send `otp` to `phonenumber`
+        # For now, log the OTP for development/testing purposes (remove in production)
+        logging.debug(f"Generated OTP for {phonenumber}: {otp}")
         return Response({"detail": "OTP sent to phone number."})
 
 
@@ -338,7 +347,9 @@ class PhoneVerificationConfirmView(APIView):
 class AdminUserListView(generics.ListAPIView):
     """List all users (admin only)."""
 
-    queryset = User.objects.all()
+    def get_queryset(self):
+        return User.objects.all().order_by("date_joined")
+
     serializer_class = AdminUserUpdateSerializer
     permission_classes = [permissions.IsAdminUser]
     filterset_fields = [
@@ -356,7 +367,9 @@ class AdminUserListView(generics.ListAPIView):
 class AdminUserUpdateView(generics.RetrieveUpdateAPIView):
     """Retrieve or update a user by ID (admin only)."""
 
-    queryset = User.objects.all()
+    def get_queryset(self):
+        return User.objects.all()
+
     serializer_class = AdminUserUpdateSerializer
     permission_classes = [permissions.IsAdminUser]
 

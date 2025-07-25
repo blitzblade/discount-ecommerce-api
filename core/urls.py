@@ -20,6 +20,9 @@ from django.urls import include, path
 from drf_yasg import openapi
 from drf_yasg.views import get_schema_view
 from rest_framework import permissions
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
@@ -43,6 +46,14 @@ auth_urlpatterns = [
     path("token/verify/", TokenVerifyView.as_view(), name="token_verify"),
 ]
 
+
+class TestProtectedView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response({"message": "You are authenticated!"})
+
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/users/", include("api.users.urls")),
@@ -51,6 +62,7 @@ urlpatterns = [
     path("api/cart/", include("api.cart.urls")),
     path("api/orders/", include("api.orders.urls")),
     path("api/auth/", include(auth_urlpatterns)),
+    path("api/test-protected/", TestProtectedView.as_view(), name="test_protected"),
 ]
 
 urlpatterns += [

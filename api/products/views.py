@@ -37,12 +37,15 @@ class ProductListCreateView(generics.ListCreateAPIView):
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get_queryset(self):
-        return (
-            Product.objects.select_related("category")
-            .prefetch_related("tags", "related_products")
-            .all()
-            .order_by("-created_at")
+        qs = Product.objects.select_related("category").prefetch_related(
+            "tags", "related_products"
         )
+        user = self.request.user
+        if user.is_authenticated and (
+            user.is_staff or getattr(user, "role", None) in ["admin", "manager"]
+        ):
+            return qs.all().order_by("-created_at")
+        return qs.filter(is_deleted=False).order_by("-created_at")
 
     def get_serializer_class(self):
         if self.request.method == "POST":
@@ -63,11 +66,15 @@ class ProductRetrieveView(generics.RetrieveAPIView):
     serializer_class = ProductReadSerializer
 
     def get_queryset(self):
-        return (
-            Product.objects.select_related("category")
-            .prefetch_related("tags", "related_products")
-            .all()
+        qs = Product.objects.select_related("category").prefetch_related(
+            "tags", "related_products"
         )
+        user = self.request.user
+        if user.is_authenticated and (
+            user.is_staff or getattr(user, "role", None) in ["admin", "manager"]
+        ):
+            return qs.all()
+        return qs.filter(is_deleted=False)
 
 
 class FetchDiscountedProductsView(APIView):
@@ -103,15 +110,23 @@ class FetchDiscountedProductsView(APIView):
                     "source_url": "https://ebay.com/product2",
                 },
             ]
-            created = []
+            user = request.user
+            qs = Product.objects
+            if not (
+                user.is_staff or getattr(user, "role", None) in ["admin", "manager"]
+            ):
+                qs = qs.filter(is_deleted=False)
+            # Only create if not already present (by name, source_platform)
+            to_create = []
             for prod in external_products:
-                product, _ = Product.objects.get_or_create(
+                if not qs.filter(
                     name=prod["name"],
                     source="external",
                     source_platform=prod["source_platform"],
-                    defaults=prod,
-                )
-                created.append(ProductReadSerializer(product).data)
+                ).exists():
+                    to_create.append(Product(**prod))
+            Product.objects.bulk_create(to_create)
+            created = [ProductReadSerializer(p).data for p in to_create]
             return Response({"created": created}, status=status.HTTP_201_CREATED)
         except Exception as exc:
             return Response(
@@ -138,25 +153,30 @@ class ProductBulkActionView(APIView):
         product_ids = request.data.get("product_ids", [])
         category_id = request.data.get("category_id")
         tag_ids = request.data.get("tag_ids", [])
-        products = Product.objects.filter(id__in=product_ids)
+        user = request.user
+        qs = Product.objects.filter(id__in=product_ids)
+        if not (user.is_staff or getattr(user, "role", None) in ["admin", "manager"]):
+            qs = qs.filter(is_deleted=False)
         try:
             if action_type == "assign_category" and category_id:
-                products.update(category_id=category_id)
+                qs.update(category_id=category_id)
                 return Response({"detail": "Category assigned to products."})
             elif action_type == "remove_category":
-                products.update(category=None)
+                qs.update(category=None)
                 return Response({"detail": "Category removed from products."})
             elif action_type == "assign_tags" and tag_ids:
-                for product in products:
+                # Use bulk operations for performance
+                for product in qs:
                     product.tags.add(*tag_ids)
                 return Response({"detail": "Tags assigned to products."})
             elif action_type == "remove_tags" and tag_ids:
-                for product in products:
+                for product in qs:
                     product.tags.remove(*tag_ids)
                 return Response({"detail": "Tags removed from products."})
             elif action_type == "bulk_delete":
-                products.delete()
-                return Response({"detail": "Products deleted."})
+                # Soft delete instead of hard delete
+                qs.update(is_deleted=True)
+                return Response({"detail": "Products soft-deleted."})
             else:
                 return Response(
                     {"detail": "Invalid action or missing parameters."},
@@ -235,14 +255,20 @@ class ProductImageListCreateTopView(generics.ListCreateAPIView):
     Supports filtering, search, and ordering.
     """
 
-    queryset = ProductImage.objects.all()
     serializer_class = ProductImageSerializer
-    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    filterset_fields = ["product"]
+    search_fields = ["product__name"]
+    ordering_fields = ["created_at", "updated_at"]
 
-    def get_permissions(self):
-        if self.request.method in ["POST"]:
-            return [IsAdminOrManager()]
-        return [permissions.AllowAny()]
+    def get_queryset(self):
+        qs = ProductImage.objects.select_related("product")
+        user = self.request.user
+        if user.is_authenticated and (
+            user.is_staff or getattr(user, "role", None) in ["admin", "manager"]
+        ):
+            return qs.all()
+        return qs.filter(product__is_deleted=False)
 
 
 class ProductImageRetrieveUpdateDestroyTopView(generics.RetrieveUpdateDestroyAPIView):
@@ -266,13 +292,20 @@ class ProductVariantListCreateTopView(generics.ListCreateAPIView):
     Supports filtering, search, and ordering.
     """
 
-    queryset = ProductVariant.objects.all()
     serializer_class = ProductVariantSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    filterset_fields = ["product", "name"]
+    search_fields = ["name", "product__name"]
+    ordering_fields = ["created_at", "updated_at"]
 
-    def get_permissions(self):
-        if self.request.method in ["POST"]:
-            return [IsAdminOrManager()]
-        return [permissions.AllowAny()]
+    def get_queryset(self):
+        qs = ProductVariant.objects.select_related("product")
+        user = self.request.user
+        if user.is_authenticated and (
+            user.is_staff or getattr(user, "role", None) in ["admin", "manager"]
+        ):
+            return qs.all()
+        return qs.filter(product__is_deleted=False)
 
 
 class ProductVariantRetrieveUpdateDestroyTopView(generics.RetrieveUpdateDestroyAPIView):
@@ -295,13 +328,20 @@ class ProductReviewListCreateTopView(generics.ListCreateAPIView):
     Supports filtering, search, and ordering.
     """
 
-    queryset = ProductReview.objects.all()
     serializer_class = ProductReviewSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    filterset_fields = ["product", "user", "rating", "is_approved"]
+    search_fields = ["review", "user__email", "product__name"]
+    ordering_fields = ["created_at", "updated_at", "rating"]
 
-    def get_permissions(self):
-        if self.request.method in ["POST"]:
-            return [permissions.IsAuthenticated()]
-        return [permissions.AllowAny()]
+    def get_queryset(self):
+        qs = ProductReview.objects.select_related("product", "user")
+        user = self.request.user
+        if user.is_authenticated and (
+            user.is_staff or getattr(user, "role", None) in ["admin", "manager"]
+        ):
+            return qs.all()
+        return qs.filter(product__is_deleted=False)
 
 
 class ProductReviewRetrieveUpdateDestroyTopView(generics.RetrieveUpdateDestroyAPIView):

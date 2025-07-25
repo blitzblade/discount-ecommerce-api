@@ -14,9 +14,13 @@ class ProductImageSerializer(serializers.ModelSerializer):
 
 
 class ProductVariantSerializer(serializers.ModelSerializer):
+    product = serializers.PrimaryKeyRelatedField(
+        queryset=Product.objects.all(), required=True
+    )
+
     class Meta:
         model = ProductVariant
-        fields = ["id", "name", "value", "created_at", "updated_at"]
+        fields = ["id", "product", "name", "value", "created_at", "updated_at"]
         read_only_fields = ["id", "created_at", "updated_at"]
 
 

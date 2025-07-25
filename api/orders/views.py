@@ -1,15 +1,19 @@
-from django.shortcuts import render
-from rest_framework import generics, permissions, status, filters
-from rest_framework.views import APIView
-from rest_framework.response import Response
+from decimal import Decimal
+
 from django.db import transaction
 from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import filters, generics, permissions, status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
 from api.cart.models import Cart, CartItem
-from .models import Order, OrderItem, OrderReview
-from .serializers import OrderSerializer, OrderReviewSerializer
 from api.common.permissions import IsAdminOrManager
 
+from .models import Order, OrderItem
+from .serializers import OrderReviewSerializer, OrderSerializer
+
 # Create your views here.
+
 
 class CheckoutView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -20,31 +24,44 @@ class CheckoutView(APIView):
             cart = Cart.objects.get(user=user, is_active=True)
             cart_items = CartItem.objects.filter(cart=cart)
             if not cart_items.exists():
-                return Response({'detail': 'Cart is empty.'}, status=status.HTTP_400_BAD_REQUEST)
-            address = user.addresses.filter(is_default=True).first() or user.addresses.first()
+                return Response(
+                    {"detail": "Cart is empty."}, status=status.HTTP_400_BAD_REQUEST
+                )
+            address = (
+                user.addresses.filter(is_default=True).first() or user.addresses.first()
+            )
             if not address:
-                return Response({'detail': 'No address found for user.'}, status=status.HTTP_400_BAD_REQUEST)
-            coupon_code = request.data.get('coupon_code')
+                return Response(
+                    {"detail": "No address found for user."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            coupon_code = request.data.get("coupon_code")
             coupon = None
-            discount = 0
-            shipping = 10  # Flat shipping for demo
-            tax_rate = 0.05  # 5% tax for demo
+            discount = Decimal("0")
+            shipping = Decimal("10")  # Flat shipping for demo
+            tax_rate = Decimal("0.05")  # 5% tax for demo
             with transaction.atomic():
-                subtotal = 0
+                subtotal = Decimal("0")
                 for item in cart_items:
                     subtotal += item.product.price * item.quantity
-                tax = round(subtotal * tax_rate, 2)
+                tax = (subtotal * tax_rate).quantize(Decimal("0.01"))
                 # Coupon logic
                 if coupon_code:
                     from .models import Coupon
+
                     try:
                         coupon = Coupon.objects.get(code=coupon_code)
                         valid, reason = coupon.is_valid_for_user(user, subtotal)
                         if not valid:
-                            return Response({'detail': reason}, status=status.HTTP_400_BAD_REQUEST)
+                            return Response(
+                                {"detail": reason}, status=status.HTTP_400_BAD_REQUEST
+                            )
                         discount = coupon.calculate_discount(subtotal)
                     except Coupon.DoesNotExist:
-                        return Response({'detail': 'Invalid coupon code.'}, status=status.HTTP_400_BAD_REQUEST)
+                        return Response(
+                            {"detail": "Invalid coupon code."},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
                 total = subtotal + shipping + tax - discount
                 order = Order.objects.create(
                     user=user,
@@ -54,7 +71,7 @@ class CheckoutView(APIView):
                     discount=discount,
                     tax=tax,
                     shipping=shipping,
-                    coupon=coupon
+                    coupon=coupon,
                 )
                 for item in cart_items:
                     price = item.product.price
@@ -63,12 +80,13 @@ class CheckoutView(APIView):
                         product=item.product,
                         product_name=item.product.name,
                         quantity=item.quantity,
-                        price=price
+                        price=price,
                     )
                     item.product.stock = max(item.product.stock - item.quantity, 0)
                     item.product.save()
                 if coupon:
                     from .models import CouponUsage
+
                     CouponUsage.objects.create(coupon=coupon, user=user, order=order)
                 cart.items.all().delete()
                 cart.is_active = False
@@ -77,34 +95,50 @@ class CheckoutView(APIView):
             serializer = OrderSerializer(order)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         except Exception as exc:
-            return Response({'detail': str(exc), 'type': type(exc).__name__}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": str(exc), "type": type(exc).__name__},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
 
 class OrderListView(generics.ListAPIView):
     serializer_class = OrderSerializer
     permission_classes = [permissions.IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['status', 'coupon_code', 'created_at']
-    search_fields = ['tracking_number']
-    ordering_fields = ['created_at', 'checked_out_at', 'total']
+    filter_backends = [
+        DjangoFilterBackend,
+        filters.SearchFilter,
+        filters.OrderingFilter,
+    ]
+    filterset_fields = ["status", "created_at"]
+    search_fields = ["tracking_number"]
+    ordering_fields = ["created_at", "checked_out_at", "total"]
 
     def get_queryset(self):
-        if getattr(self, 'swagger_fake_view', False):
+        if getattr(self, "swagger_fake_view", False):
             return Order.objects.none()
-        qs = Order.objects.filter(user=self.request.user).order_by('-checked_out_at')
-        # If admin/manager, allow searching all orders
-        if self.request.user.is_staff or getattr(self.request.user, 'role', None) in ['admin', 'manager']:
-            qs = Order.objects.all().order_by('-checked_out_at')
-            self.search_fields = ['tracking_number', 'user__email']
+        qs = Order.objects.select_related("user", "address", "coupon").prefetch_related(
+            "items"
+        )
+        if self.request.user.is_staff or getattr(self.request.user, "role", None) in [
+            "admin",
+            "manager",
+        ]:
+            qs = qs.all().order_by("-checked_out_at")
+            self.search_fields = ["tracking_number", "user__email"]
+        else:
+            qs = qs.filter(user=self.request.user).order_by("-checked_out_at")
         return qs
+
 
 class OrderDetailView(generics.RetrieveAPIView):
     serializer_class = OrderSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        if getattr(self, 'swagger_fake_view', False):
+        if getattr(self, "swagger_fake_view", False):
             return Order.objects.none()
         return Order.objects.filter(user=self.request.user)
+
 
 class OrderStatusUpdateView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsAdminOrManager]
@@ -112,31 +146,43 @@ class OrderStatusUpdateView(APIView):
     def patch(self, request, pk):
         try:
             order = Order.objects.get(pk=pk)
-            new_status = request.data.get('status')
-            tracking_number = request.data.get('tracking_number')
-            admin_note = request.data.get('admin_note')
+            new_status = request.data.get("status")
+            tracking_number = request.data.get("tracking_number")
+            admin_note = request.data.get("admin_note")
             if tracking_number is not None:
                 order.tracking_number = tracking_number
             if admin_note is not None:
                 order.admin_note = admin_note
             if new_status:
                 if order.set_status(new_status):
-                    return Response({'detail': f'Status updated to {new_status}.'})
+                    return Response({"detail": f"Status updated to {new_status}."})
                 else:
-                    return Response({'detail': 'Invalid status transition.'}, status=status.HTTP_400_BAD_REQUEST)
+                    return Response(
+                        {"detail": "Invalid status transition."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
             order.save()
-            return Response({'detail': 'Order updated.'})
+            return Response({"detail": "Order updated."})
         except Order.DoesNotExist:
-            return Response({'detail': 'Order not found.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"detail": "Order not found."}, status=status.HTTP_404_NOT_FOUND
+            )
         except Exception as exc:
-            return Response({'detail': str(exc), 'type': type(exc).__name__}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": str(exc), "type": type(exc).__name__},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
 
 class OrderReviewCreateView(generics.CreateAPIView):
     serializer_class = OrderReviewSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def perform_create(self, serializer):
-        order = Order.objects.get(pk=self.request.data['order'])
-        if order.user != self.request.user or order.status != Order.Status.DELIVERED:
-            raise PermissionError('You can only review your own delivered orders.')
-        serializer.save(user=self.request.user, order=order)
+        from rest_framework.exceptions import PermissionDenied
+
+        order = Order.objects.get(pk=self.request.data["order"])
+        user = self.request.user
+        if order.user != user or order.status != Order.Status.DELIVERED:
+            raise PermissionDenied("You can only review your own delivered orders.")
+        serializer.save(user=user, order=order)
