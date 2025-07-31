@@ -135,7 +135,11 @@ USE_TZ = True
 
 USE_S3 = env.bool("USE_S3", default=False)
 
+# Always define STATIC_ROOT for Django's staticfiles app
+STATIC_ROOT = os.path.join(BASE_DIR, "static")
+
 if USE_S3:
+    print("Using AWS S3")
     # AWS S3 settings for both static and media
     AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME")
     AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID")
@@ -150,8 +154,8 @@ if USE_S3:
     STATIC_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/static/"
     MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/media/"
 else:
+    print("Using local storage")
     STATIC_URL = "/static/"
-    STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
     MEDIA_URL = "/media/"
     MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
