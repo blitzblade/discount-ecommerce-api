@@ -6,10 +6,10 @@ from .models import User
 
 class UserAdmin(BaseUserAdmin):
     ordering = ["id"]
-    list_display = ["email", "first_name", "last_name", "is_staff", "is_active"]
+    list_display = ["email", "first_name", "last_name", "is_staff", "is_active", "date_joined"]
     fieldsets = (
         (None, {"fields": ("email", "password")}),
-        ("Personal Info", {"fields": ("first_name", "last_name")}),
+        ("Personal Info", {"fields": ("first_name", "last_name", "phonenumber", "date_of_birth", "gender", "role")}),
         (
             "Permissions",
             {
@@ -22,14 +22,15 @@ class UserAdmin(BaseUserAdmin):
                 )
             },
         ),
-        ("Important dates", {"fields": ("last_login", "date_joined")}),
+        ("Important dates", {"fields": ("last_login",)}),
+        ("Verification", {"fields": ("is_email_verified", "is_phonenumber_verified")}),
     )
     add_fieldsets = (
         (
             None,
             {
                 "classes": ("wide",),
-                "fields": ("email", "password1", "password2", "is_staff", "is_active"),
+                "fields": ("email", "phonenumber", "password1", "password2", "is_staff", "is_active"),
             },
         ),
     )
