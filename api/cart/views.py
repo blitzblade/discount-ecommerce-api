@@ -153,13 +153,20 @@ class CartItemListCreateTopView(generics.ListCreateAPIView):
         )
 
     def perform_create(self, serializer):
-        cart = Cart.objects.filter(user=self.request.user, is_active=True).first()
+        # Get or create active cart for the user
+        cart, created = Cart.objects.get_or_create(
+            user=self.request.user, 
+            is_active=True, 
+            defaults={}
+        )
         product = serializer.validated_data["product"]
         price = product.price
         existing_item = CartItem.objects.filter(cart=cart, product=product).first()
         if existing_item:
             existing_item.quantity += serializer.validated_data.get("quantity", 1)
             existing_item.save()
+            # Set the instance to the updated existing item
+            serializer.instance = existing_item
         else:
             serializer.save(cart=cart, price=price)
 
