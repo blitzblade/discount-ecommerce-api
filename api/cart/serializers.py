@@ -25,7 +25,7 @@ class CartItemSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "product", "price", "created_at", "updated_at"]
+        read_only_fields = ["id", "cart", "product", "price", "created_at", "updated_at"]
 
 
 class CartSerializer(serializers.ModelSerializer):
