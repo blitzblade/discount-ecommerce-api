@@ -56,3 +56,6 @@ class AddressAdmin(admin.ModelAdmin):
     list_filter = ["is_default", "country", "state"]
     search_fields = ["user__email", "line1", "city", "state", "country"]
     ordering = ["user__email", "is_default"]
+
+
+admin.site.register(User, UserAdmin)
