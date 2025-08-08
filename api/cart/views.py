@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import Cart, CartItem
-from .serializers import CartItemSerializer, CartSerializer
+from .serializers import CartItemSerializer, CartItemReadSerializer, CartSerializer
 
 # Create your views here.
 
@@ -80,6 +80,11 @@ class CartItemListCreateView(generics.ListCreateAPIView):
     serializer_class = CartItemSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_serializer_class(self):
+        if self.request.method == 'GET':
+            return CartItemReadSerializer
+        return super().get_serializer_class()
+
     def get_queryset(self):
         # Fix for drf-yasg schema generation (AnonymousUser)
         if getattr(self, "swagger_fake_view", False):
@@ -102,6 +107,11 @@ class CartItemListCreateView(generics.ListCreateAPIView):
 class CartItemRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = CartItemSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.request.method == 'GET':
+            return CartItemReadSerializer
+        return super().get_serializer_class()
 
     def get_queryset(self):
         # Fix for drf-yasg schema generation (AnonymousUser)
@@ -147,6 +157,11 @@ class CartItemListCreateTopView(generics.ListCreateAPIView):
     search_fields = ["product__name"]
     ordering_fields = ["created_at", "updated_at", "quantity"]
 
+    def get_serializer_class(self):
+        if self.request.method == 'GET':
+            return CartItemReadSerializer
+        return super().get_serializer_class()
+
     def get_queryset(self):
         return CartItem.objects.select_related("product").filter(
             cart__user=self.request.user, cart__is_active=True
@@ -178,6 +193,11 @@ class CartItemRetrieveUpdateDestroyTopView(generics.RetrieveUpdateDestroyAPIView
 
     serializer_class = CartItemSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.request.method == 'GET':
+            return CartItemReadSerializer
+        return super().get_serializer_class()
 
     def get_queryset(self):
         # Fix for drf-yasg schema generation (AnonymousUser)
