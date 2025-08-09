@@ -129,3 +129,25 @@ class OrderSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = fields
+
+
+# Checkout schemas for API documentation
+class CheckoutRequestSerializer(serializers.Serializer):
+    """Request payload for checkout.
+
+    - coupon_code: Optional coupon to apply to the order.
+    """
+
+    coupon_code = serializers.CharField(required=False, allow_blank=True)
+
+
+class CheckoutResponseSerializer(OrderSerializer):
+    """Response payload for checkout.
+
+    Extends OrderSerializer with an optional shipping_warning message.
+    """
+
+    shipping_warning = serializers.CharField(read_only=True, required=False, allow_blank=True)
+
+    class Meta(OrderSerializer.Meta):
+        fields = OrderSerializer.Meta.fields + ["shipping_warning"]

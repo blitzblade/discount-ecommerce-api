@@ -6,12 +6,20 @@ from rest_framework import filters, generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+
 from api.cart.models import Cart, CartItem
 from api.common.permissions import IsAdminOrManager
 from api.common.utils import calculate_shipping, calculate_tax
 
 from .models import Order, OrderItem
-from .serializers import OrderReviewSerializer, OrderSerializer
+from .serializers import (
+    CheckoutRequestSerializer,
+    CheckoutResponseSerializer,
+    OrderReviewSerializer,
+    OrderSerializer,
+)
 
 # Create your views here.
 
@@ -19,6 +27,15 @@ from .serializers import OrderReviewSerializer, OrderSerializer
 class CheckoutView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @swagger_auto_schema(
+        operation_summary="Checkout",
+        operation_description="Create an order from the user's active cart. Applies optional coupon, calculates shipping and tax, reduces stock, and clears the cart.",
+        request_body=CheckoutRequestSerializer,
+        responses={
+            201: CheckoutResponseSerializer,
+            400: openapi.Response("Bad Request: validation or business rule errors."),
+        },
+    )
     def post(self, request):
         user = request.user
         try:
