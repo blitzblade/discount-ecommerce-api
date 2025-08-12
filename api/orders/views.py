@@ -119,7 +119,8 @@ class CheckoutView(APIView):
 
                     CouponUsage.objects.create(coupon=coupon, user=user, order=order)
                 cart.items.all().delete()
-                cart.is_active = False
+                # Keep cart active since user-cart is one-to-one relationship
+                # Just mark as checked out for tracking purposes
                 cart.checked_out = True
                 cart.save()
             serializer = OrderSerializer(order)
