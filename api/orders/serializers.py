@@ -147,7 +147,9 @@ class CheckoutResponseSerializer(OrderSerializer):
     Extends OrderSerializer with an optional shipping_warning message.
     """
 
-    shipping_warning = serializers.CharField(read_only=True, required=False, allow_blank=True)
+    shipping_warning = serializers.CharField(
+        read_only=True, required=False, allow_blank=True
+    )
 
     class Meta(OrderSerializer.Meta):
         fields = OrderSerializer.Meta.fields + ["shipping_warning"]

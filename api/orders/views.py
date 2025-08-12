@@ -2,12 +2,11 @@ from decimal import Decimal
 
 from django.db import transaction
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
 from rest_framework import filters, generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-
-from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
 
 from api.cart.models import Cart, CartItem
 from api.common.permissions import IsAdminOrManager
@@ -28,8 +27,13 @@ class CheckoutView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="Checkout",
-        operation_description="Create an order from the user's active cart. Applies optional coupon, calculates shipping and tax, reduces stock, and clears the cart.",
+        operation_summary="checkout",
+        operation_description=(
+            """
+            Create an order from the user's active cart.
+            Applies optional coupon, calculates shipping and tax, reduces stock, and clears the cart.
+            """
+        ),
         request_body=CheckoutRequestSerializer,
         responses={
             201: CheckoutResponseSerializer,

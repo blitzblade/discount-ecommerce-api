@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import Cart, CartItem
-from .serializers import CartItemSerializer, CartItemReadSerializer, CartSerializer
+from .serializers import CartItemReadSerializer, CartItemSerializer, CartSerializer
 
 # Create your views here.
 
@@ -35,17 +35,13 @@ class CartListCreateView(generics.ListCreateAPIView):
 
     def list(self, request, *args, **kwargs):
         # Return the active cart, or create one if none exists
-        cart, created = Cart.objects.get_or_create(
-            user=request.user, is_active=True, defaults={}
-        )
+        cart, created = Cart.objects.get_or_create(user=request.user, defaults={})
         serializer = self.get_serializer(cart)
         return Response([serializer.data])
 
     def create(self, request, *args, **kwargs):
         # Return the active cart if it exists, otherwise create one
-        cart, created = Cart.objects.get_or_create(
-            user=request.user, is_active=True, defaults={}
-        )
+        cart, created = Cart.objects.get_or_create(user=request.user, defaults={})
         serializer = self.get_serializer(cart)
         return Response(
             serializer.data,
@@ -81,7 +77,7 @@ class CartItemListCreateView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_serializer_class(self):
-        if self.request.method == 'GET':
+        if self.request.method == "GET":
             return CartItemReadSerializer
         return super().get_serializer_class()
 
@@ -109,7 +105,7 @@ class CartItemRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_serializer_class(self):
-        if self.request.method == 'GET':
+        if self.request.method == "GET":
             return CartItemReadSerializer
         return super().get_serializer_class()
 
@@ -158,22 +154,18 @@ class CartItemListCreateTopView(generics.ListCreateAPIView):
     ordering_fields = ["created_at", "updated_at", "quantity"]
 
     def get_serializer_class(self):
-        if self.request.method == 'GET':
+        if self.request.method == "GET":
             return CartItemReadSerializer
         return super().get_serializer_class()
 
     def get_queryset(self):
         return CartItem.objects.select_related("product").filter(
-            cart__user=self.request.user, cart__is_active=True
+            cart__user=self.request.user
         )
 
     def perform_create(self, serializer):
         # Get or create active cart for the user
-        cart, created = Cart.objects.get_or_create(
-            user=self.request.user, 
-            is_active=True, 
-            defaults={}
-        )
+        cart, created = Cart.objects.get_or_create(user=self.request.user, defaults={})
         product = serializer.validated_data["product"]
         price = product.price
         existing_item = CartItem.objects.filter(cart=cart, product=product).first()
@@ -195,7 +187,7 @@ class CartItemRetrieveUpdateDestroyTopView(generics.RetrieveUpdateDestroyAPIView
     permission_classes = [permissions.IsAuthenticated]
 
     def get_serializer_class(self):
-        if self.request.method == 'GET':
+        if self.request.method == "GET":
             return CartItemReadSerializer
         return super().get_serializer_class()
 
@@ -203,6 +195,4 @@ class CartItemRetrieveUpdateDestroyTopView(generics.RetrieveUpdateDestroyAPIView
         # Fix for drf-yasg schema generation (AnonymousUser)
         if getattr(self, "swagger_fake_view", False):
             return CartItem.objects.none()
-        return CartItem.objects.filter(
-            cart__user=self.request.user, cart__is_active=True
-        )
+        return CartItem.objects.filter(cart__user=self.request.user)

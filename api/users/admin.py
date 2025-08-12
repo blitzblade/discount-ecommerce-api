@@ -1,16 +1,44 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 
-from .models import User, Profile, Address
+from .models import Address, Profile, User
 
 
 class UserAdmin(BaseUserAdmin):
     ordering = ["id"]
-    list_display = ["email", "first_name", "last_name", "role", "is_staff", "is_active", "date_joined"]
-    list_filter = ["role", "is_active", "is_staff", "is_email_verified", "is_phonenumber_verified", "gender"]
+    list_display = [
+        "email",
+        "first_name",
+        "last_name",
+        "role",
+        "is_staff",
+        "is_active",
+        "date_joined",
+    ]
+    list_filter = [
+        "role",
+        "is_active",
+        "is_staff",
+        "is_email_verified",
+        "is_phonenumber_verified",
+        "gender",
+    ]
     fieldsets = (
         (None, {"fields": ("email", "password")}),
-        ("Personal Info", {"fields": ("username", "first_name", "last_name", "phonenumber", "date_of_birth", "gender", "role")}),
+        (
+            "Personal Info",
+            {
+                "fields": (
+                    "username",
+                    "first_name",
+                    "last_name",
+                    "phonenumber",
+                    "date_of_birth",
+                    "gender",
+                    "role",
+                )
+            },
+        ),
         (
             "Permissions",
             {
@@ -32,7 +60,14 @@ class UserAdmin(BaseUserAdmin):
             None,
             {
                 "classes": ("wide",),
-                "fields": ("email", "phonenumber", "password1", "password2", "is_staff", "is_active"),
+                "fields": (
+                    "email",
+                    "phonenumber",
+                    "password1",
+                    "password2",
+                    "is_staff",
+                    "is_active",
+                ),
             },
         ),
     )
